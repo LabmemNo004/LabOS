@@ -1,2 +1,1 @@
-# LabOS
-Our lab's operating system
+"# project-for-os-BJOS" 
