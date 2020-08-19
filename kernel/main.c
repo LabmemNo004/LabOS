@@ -1,8 +1,8 @@
 
 /*++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-                            main.c
+main.c
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-                                                    Forrest Yu, 2005
+
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 
 #include "type.h"
@@ -17,137 +17,283 @@
 #include "global.h"
 #include "proto.h"
 
+#define	MAX_USER		10
+#define	MAX_USER_FILE	100
+#define MAX_USER_DIR	5
+#define	MAX_PSWD_LEN	12
+
+#define	MAX_FILES		80
+#define	MAX_DIRS		50
+
+
+char location[MAX_FILENAME_LEN] = "root";
+char files[MAX_FILES][MAX_FILENAME_LEN];
+int  filequeue[MAX_FILES];
+int  filecount = 0;
+char dirs[MAX_DIRS][MAX_FILENAME_LEN];
+int  dirqueue[MAX_FILES];
+int  dircount = 0;
+
+void shabby_shell(const char * tty_name);
+
+int isDir(const char * filepath);
+
+void getFilepath(char *filepath, char * filename);
+void getDirFilepath(char *filepath, char * filename);
+void getDirpathAndFilename(char * dirpath, char * filename, char * filepath);
+
+int getFreeFilePos();
+int getFreeDirPos();
+int getPosInDirQueue(char * filepath);
+
+
+void addFileIntoDir(const char * dirpath, char * filename);
+void deleteFileFromDir(const char * dirpath, char * filename);
+
+void initFS();
+void welcome();
+void clear();
+void showProcess();
+void killProcess();
+void makeProcess();
+void help();
+void colorful();
+void createFile(char * filepath, char *filename, char * buf);
+void createDir(char * filepath, char *filename);
+void readFile(char * filename);
+void editAppand(const char * filepath, char * str);
+void editCover(const char * filepath, char * str);
+void deleteFile(char * filepath);
+void deleteDir(char * filepath);
+void ls();
+void cd(char * dirname);
+void cdback();
+
+
 
 /*****************************************************************************
- *                               kernel_main
- *****************************************************************************/
+*                               kernel_main
+*****************************************************************************/
 /**
- * jmp from kernel.asm::_start. 
- * 
- *****************************************************************************/
+* jmp from kernel.asm::_start.
+*
+*****************************************************************************/
 PUBLIC int kernel_main()
+
 {
+
 	disp_str("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-		 "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+
+		"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+
+
 
 	int i, j, eflags, prio;
-        u8  rpl;
-        u8  priv; /* privilege */
+
+	u8  rpl;
+
+	u8  priv; /* privilege */
+
+
 
 	struct task * t;
+
 	struct proc * p = proc_table;
-	QUEUE*	p_queue	= queue_table;
-	int*	p_prio	= priority_table;
+
+
 
 	char * stk = task_stack + STACK_SIZE_TOTAL;
 
-	for (i = 0; i < NR_QUEUE + 1; i++){
-		p_queue->p_head = p_queue->p_tail = p_queue->buf;
-		p_queue->priority = *p_prio;
-		p_queue->count = 0;
-		p_prio++;
-		p_queue++;
-	}
-	
 
-	for (i = 0; i < NR_TASKS + NR_PROCS; i++,p++,t++) {
+
+	for (i = 0; i < NR_TASKS + NR_PROCS; i++, p++, t++) {
+
 		if (i >= NR_TASKS + NR_NATIVE_PROCS) {
+
 			p->p_flags = FREE_SLOT;
+
 			continue;
+
 		}
 
-	        if (i < NR_TASKS) {     /* TASK */
-                        t	= task_table + i;
-                        priv	= PRIVILEGE_TASK;
-                        rpl     = RPL_TASK;
-                        eflags  = 0x1202;/* IF=1, IOPL=1, bit 2 is always 1 */
-			prio    = 15;
-                }
-                else {                  /* USER PROC */
-                        t	= user_proc_table + (i - NR_TASKS);
-                        priv	= PRIVILEGE_USER;
-                        rpl     = RPL_USER;
-                        eflags  = 0x202;	/* IF=1, bit 2 is always 1 */
-			prio    = 5;
-                }
+
+
+		if (i < NR_TASKS) {     /* TASK */
+
+			t = task_table + i;
+
+			priv = PRIVILEGE_TASK;
+
+			rpl = RPL_TASK;
+
+			eflags = 0x1202;/* IF=1, IOPL=1, bit 2 is always 1 */
+
+			prio = 15;
+
+		}
+
+		else {                  /* USER PROC */
+
+			t = user_proc_table + (i - NR_TASKS);
+
+			priv = PRIVILEGE_USER;
+
+			rpl = RPL_USER;
+
+			eflags = 0x202;	/* IF=1, bit 2 is always 1 */
+
+			prio = 5;
+
+		}
+
+
 
 		strcpy(p->name, t->name);	/* name of the process */
+
 		p->p_parent = NO_TASK;
 
+
+
 		if (strcmp(t->name, "INIT") != 0) {
-			p->ldts[INDEX_LDT_C]  = gdt[SELECTOR_KERNEL_CS >> 3];
+
+			p->ldts[INDEX_LDT_C] = gdt[SELECTOR_KERNEL_CS >> 3];
+
 			p->ldts[INDEX_LDT_RW] = gdt[SELECTOR_KERNEL_DS >> 3];
 
+
+
 			/* change the DPLs */
-			p->ldts[INDEX_LDT_C].attr1  = DA_C   | priv << 5;
+
+			p->ldts[INDEX_LDT_C].attr1 = DA_C | priv << 5;
+
 			p->ldts[INDEX_LDT_RW].attr1 = DA_DRW | priv << 5;
+
 		}
+
 		else {		/* INIT process */
+
 			unsigned int k_base;
+
 			unsigned int k_limit;
+
 			int ret = get_kernel_map(&k_base, &k_limit);
+
 			assert(ret == 0);
+
 			init_desc(&p->ldts[INDEX_LDT_C],
-				  0, /* bytes before the entry point
-				      * are useless (wasted) for the
-				      * INIT process, doesn't matter
-				      */
-				  (k_base + k_limit) >> LIMIT_4K_SHIFT,
-				  DA_32 | DA_LIMIT_4K | DA_C | priv << 5);
+
+				0, /* bytes before the entry point
+
+				   * are useless (wasted) for the
+
+				   * INIT process, doesn't matter
+
+				   */
+
+				(k_base + k_limit) >> LIMIT_4K_SHIFT,
+
+				DA_32 | DA_LIMIT_4K | DA_C | priv << 5);
+
+
 
 			init_desc(&p->ldts[INDEX_LDT_RW],
-				  0, /* bytes before the entry point
-				      * are useless (wasted) for the
-				      * INIT process, doesn't matter
-				      */
-				  (k_base + k_limit) >> LIMIT_4K_SHIFT,
-				  DA_32 | DA_LIMIT_4K | DA_DRW | priv << 5);
+
+				0, /* bytes before the entry point
+
+				   * are useless (wasted) for the
+
+				   * INIT process, doesn't matter
+
+				   */
+
+				(k_base + k_limit) >> LIMIT_4K_SHIFT,
+
+				DA_32 | DA_LIMIT_4K | DA_DRW | priv << 5);
+
 		}
 
-		p->regs.cs = INDEX_LDT_C << 3 |	SA_TIL | rpl;
-		p->regs.ds =
-			p->regs.es =
-			p->regs.fs =
-			p->regs.ss = INDEX_LDT_RW << 3 | SA_TIL | rpl;
-		p->regs.gs = (SELECTOR_KERNEL_GS & SA_RPL_MASK) | rpl;
-		p->regs.eip	= (u32)t->initial_eip;
-		p->regs.esp	= (u32)stk;
-		p->regs.eflags	= eflags;
 
-		p->type= prio;
+
+		p->regs.cs = INDEX_LDT_C << 3 | SA_TIL | rpl;
+
+		p->regs.ds =
+
+			p->regs.es =
+
+			p->regs.fs =
+
+			p->regs.ss = INDEX_LDT_RW << 3 | SA_TIL | rpl;
+
+		p->regs.gs = (SELECTOR_KERNEL_GS & SA_RPL_MASK) | rpl;
+
+		p->regs.eip = (u32)t->initial_eip;
+
+		p->regs.esp = (u32)stk;
+
+		p->regs.eflags = eflags;
+
+
+
+		p->ticks = p->priority = prio;
+
+
 
 		p->p_flags = 0;
+
 		p->p_msg = 0;
+
 		p->p_recvfrom = NO_TASK;
+
 		p->p_sendto = NO_TASK;
+
 		p->has_int_msg = 0;
+
 		p->q_sending = 0;
+
 		p->next_sending = 0;
 
+
+
 		for (j = 0; j < NR_FILES; j++)
+
 			p->filp[j] = 0;
 
+
+
 		stk -= t->stacksize;
-		append_proc(p , queue_table);
+
 	}
 
+
+
 	k_reenter = 0;
+
 	ticks = 0;
 
-	p_proc_ready	= proc_table;
+
+
+	p_proc_ready = proc_table;
+
+
 
 	init_clock();
-        init_keyboard();
+
+	init_keyboard();
+
+
 
 	restart();
 
-	while(1){}
+
+
+	while (1) {}
+
 }
 
 
 /*****************************************************************************
- *                                get_ticks
- *****************************************************************************/
+*                                get_ticks
+*****************************************************************************/
 PUBLIC int get_ticks()
 {
 	MESSAGE msg;
@@ -159,9 +305,9 @@ PUBLIC int get_ticks()
 
 
 /**
- * @struct posix_tar_header
- * Borrowed from GNU `tar'
- */
+* @struct posix_tar_header
+* Borrowed from GNU `tar'
+*/
 struct posix_tar_header
 {				/* byte offset */
 	char name[100];		/*   0 */
@@ -180,20 +326,20 @@ struct posix_tar_header
 	char devmajor[8];	/* 329 */
 	char devminor[8];	/* 337 */
 	char prefix[155];	/* 345 */
-	/* 500 */
+						/* 500 */
 };
 
 /*****************************************************************************
- *                                untar
- *****************************************************************************/
+*                                untar
+*****************************************************************************/
 /**
- * Extract the tar file and store them.
- * 
- * @param filename The tar file.
- *****************************************************************************/
+* Extract the tar file and store them.
+*
+* @param filename The tar file.
+*****************************************************************************/
 void untar(const char * filename)
 {
-	printf("[extract `%s'\n", filename);
+	printf("[extract `%s'", filename);
 	int fd = open(filename, O_RDWR);
 	assert(fd != -1);
 
@@ -220,11 +366,11 @@ void untar(const char * filename)
 			printf(" aborted]");
 			return;
 		}
-		printf("    %s (%d bytes)\n", phdr->name, f_len);
+		printf("    %s (%d bytes)", phdr->name, f_len);
 		while (bytes_left) {
 			int iobytes = min(chunk, bytes_left);
 			read(fd, buf,
-			     ((iobytes - 1) / SECTOR_SIZE + 1) * SECTOR_SIZE);
+				((iobytes - 1) / SECTOR_SIZE + 1) * SECTOR_SIZE);
 			write(fdout, buf, iobytes);
 			bytes_left -= iobytes;
 		}
@@ -238,243 +384,141 @@ void untar(const char * filename)
 
 
 /*****************************************************************************
- *                                ls
- *****************************************************************************/
-
-
-void help()
+*                                Init
+*****************************************************************************/
+/**
+* The hen.
+*
+*****************************************************************************/
+void Init()
 {
-	printf("========================================================================\n");
-	printf("                          YBJ Operater System\n");
-	printf("                       Build in September, 2017\n");
-	printf("========================================================================\n");
-	printf("Usage:\n");
-	printf("  File:\n");
-	printf("        ls                list directory contents\n");
-	printf("        mkdir             make directories\n");
-	printf("        create            create a new file\n");
-	printf("        cd                enter a directories\n");
-	printf("        rm                remove files or directories\n");
-	printf("        rename            rename a file\n");
-	printf("        read              read a file\n");
-	printf("        edit             overwrite a file\n");
-	printf("        edit+            write a file\n");
-	printf("------------------------------------------------------------------------\n");
-	printf("  System:\n");
-	printf("        clear             clear the terminal screen\n");
-	printf("        uname             print system information\n");
-	printf("        help              display this help and exit\n");
-	printf("        echo              display a line of text\n");
-	printf("        reset             terminal initialization\n");
-	printf("        pidof             find the process ID of a running program\n");
-	printf("------------------------------------------------------------------------\n");
-	printf("  Application:\n");
-	printf("        queen             game\n");
-	printf("        calculator        game\n");
-	printf("========================================================================\n");
+	int fd_stdin = open("/dev_tty0", O_RDWR);
+	assert(fd_stdin == 0);
+	int fd_stdout = open("/dev_tty0", O_RDWR);
+	assert(fd_stdout == 1);
 
-}
+	//printf("Init() is running ...\n");
+
+	/* extract `cmd.tar' */
+	untar("/cmd.tar");
 
 
+	char * tty_list[] = { "/dev_tty0" };
 
-
-void clean()
-{
-	MESSAGE msg;
-	reset_msg(&msg);
-	msg.type = CLEAN;
-	msg.FD = 0;
-	send_recv(SEND, TASK_FS, &msg);
-//	return msg.RETVAL;
-
-}
-
-void reset()
-{
-	MESSAGE msg;
-	reset_msg(&msg);
-	msg.type = RESET;
-	msg.FD = 0;
-	send_recv(SEND, TASK_FS, &msg);
-//	return msg.RETVAL;
-}
-
-//int get_path(char* ch)
-//{
-//	MESSAGE msg;
-//	reset_msg(&msg);
-//	msg.type = GET_PATH;
-//	msg.FD = 0;
-//	char a = 'a';
-//	char* b = (char*)msg.BUF;
-//	*b++ = a;
-//	*b++ = a;
-//	*b = 0;
-//	printl("%s 0\n",msg.BUF);
-//	send_recv(BOTH, TASK_FS, &msg);
-//	printl("%s 4\n",msg.BUF);		
-//	char* s  = (char*)msg.BUF;
-//	while(*s)
-//	{
-//		*ch++ = *s++;
-//	}
-//	return msg.CNT;
-//}
-
-
-int pidof(char* p_name)
-{
-	struct proc*	p=proc_table;
 	int i;
-	for (i=0; i< NR_TASKS + NR_PROCS; i++,p++) 
-	{
-		if (p->p_flags == 0) 
-		{
-		//	printf("%s, %s, %d\n",p_name,p->name,strcmp(p_name,p->name));
-			if(strcmp(p_name,p->name)==0)
-				return i;
+	for (i = 0; i < sizeof(tty_list) / sizeof(tty_list[0]); i++) {
+		int pid = fork();
+		if (pid != 0) { /* parent process */
+		}
+		else {	/* child process */
+			close(fd_stdin);
+			close(fd_stdout);
+
+			shabby_shell(tty_list[i]);
+			assert(0);
 		}
 	}
-	return -1;
+
+	while (1) {
+		int s;
+		int child = wait(&s);
+		printf("child (%d) exited with status: %d.\n", child, s);
+	}
+
+	assert(0);
 }
 
-void fillpath(char* a,char* b)
+
+/*======================================================================*
+TestA
+*======================================================================*/
+void TestA()
 {
-	char* ch = a;
-	char  path[MAX_PATH];
-	char* s = path;
-	char* c = b;
-	if(*b == '.')
-	{
-		if(*(b + 1) == '.'&&*(b + 2) == '/')
-		{
-			if(strlen(a) == 1)
-				return;
-			b += 3;
-			while(*ch){ ch++; }
-			ch -= 2;
-			while(*ch != '/') { ch--; }
-			int i = 0;
-			while(i < ch - a + 1)
-			{
-				*s++ = *(a + i);
-				i++;
-			}
-			while(*b)
-			{
-				*s++ = *b++;
-			}
-			*s = 0;
-		}
-		else if(*(b + 1) == '.')
-		{
-			if(strlen(a) == 1)
-				return;
-			while(*ch){ ch++; }
-			ch -= 2;
-			while(*ch != '/') { ch--; }
-			int i = 0;
-			while(i < ch - a + 1)
-			{
-				*s++ = *(a + i);
-				i++;
-			}
-			*s = 0;
-		}
-		else if(*( b + 1 ) == '/')
-		{
-			int i = 0;
-			b += 2;
-			while(*(a + i))
-			{
-				*s++ = *(a + i);
-				i++;
-			}
-			while(*b)
-			{
-				*s++ = *b++;
-			}
-			*s = 0;
-		}
-		else{
-			int i = 0;
-			while(*(a + i))
-			{
-				*s++ = *(a + i);
-				i++;
-			}
-			*s = 0;		
-		}
-	}
-	else if(*b == '/'){
-		return 0;
-	}
-	else{
-		int i = 0;
-		while(*(a + i))
-		{
-			*s++ = *(a + i);
-			i++;
-		}
-		while(*b)
-		{
-			*s++ = *b++;
-		}
-		*s = 0;	
-	}
-	s = path;
-	while(*s)
-	{
-		*c++ = *s++;
-	}
-	*c =0;
+	for (;;);
 }
 
+/*======================================================================*
+TestB
+*======================================================================*/
+void TestB()
+{
+	for (;;);
+}
+
+/*======================================================================*
+TestB
+*======================================================================*/
+void TestC()
+{
+	for (;;);
+}
 
 /*****************************************************************************
- *                                shabby_shell
- *****************************************************************************/
+*                                panic
+*****************************************************************************/
+PUBLIC void panic(const char *fmt, ...)
+{
+	char buf[256];
+
+	/* 4 is the size of fmt in the stack */
+	va_list arg = (va_list)((char*)&fmt + 4);
+
+	vsprintf(buf, fmt, arg);
+
+	printl("%c !!panic!! %s", MAG_CH_PANIC, buf);
+
+	/* should never arrive here */
+	__asm__ __volatile__("ud2");
+}
+
+/*****************************************************************************
+*                                wx_shell
+*****************************************************************************/
 /**
- * A very very simple shell.
- * 
- * @param tty_name  TTY file name.
- *****************************************************************************/
+* A very powerful shell.
+*
+* @param tty_name  TTY file name.
+*****************************************************************************/
 void shabby_shell(const char * tty_name)
 {
-	int fd_stdin  = open(tty_name, O_RDWR);
-	assert(fd_stdin  == 0);
+
+
+	int fd_stdin = open(tty_name, O_RDWR);
+	assert(fd_stdin == 0);
 	int fd_stdout = open(tty_name, O_RDWR);
 	assert(fd_stdout == 1);
 
 	char rdbuf[128];
 	char cmd[128];
-    	char arg1[128];
-    	char arg2[128];
-    	char buffer[1024];
-	char current_path[MAX_PATH] = "/";
-	int length = strlen(current_path);
-	help();
-	//animation();
+	char arg1[MAX_FILENAME_LEN];
+	char arg2[MAX_FILENAME_LEN];
+	char filepath[MAX_FILENAME_LEN];
+
+	//colorful();
+	animation();
+	clear();
+	welcome();
+
+	initFS();
+
 	while (1) {
-		//length = get_path(current_path);
-		write(1, current_path, length);
-		write(1, "$ ", 2);
-		//printf("%s, %d",current_path, length);
-		eraseArray(&rdbuf,128);
-		eraseArray(&cmd,128);
-		eraseArray(&arg1,128);
-		eraseArray(&arg2,128);
-		eraseArray(buffer,1024);
+
+		memset(rdbuf, 0, 128);
+		memset(cmd, 0, 128);
+		memset(arg1, 0, MAX_FILENAME_LEN);
+		memset(arg2, 0, MAX_FILENAME_LEN);
+
+		printf("%s $ ", location);
 		int r = read(0, rdbuf, 70);
 		rdbuf[r] = 0;
-		
+
+
 		int argc = 0;
 		char * argv[PROC_ORIGIN_STACK];
 		char * p = rdbuf;
 		char * s;
 		int word = 0;
 		char ch;
-		
 		do {
 			ch = *p;
 			if (*p != ' ' && *p != 0 && !word) {
@@ -487,188 +531,204 @@ void shabby_shell(const char * tty_name)
 				*p = 0;
 			}
 			p++;
-		} while(ch);
+		} while (ch);
 		argv[argc] = 0;
-		
+
 		int fd = open(argv[0], O_RDWR);
 		if (fd == -1) {
-			if(rdbuf[0])
-			{
-				int i = 0;
-				int j = 0;
-
+			if (rdbuf[0]) {
+				int i = 0, j = 0;
+				/* get command */
 				while (rdbuf[i] != ' ' && rdbuf[i] != 0)
 				{
 					cmd[i] = rdbuf[i];
 					i++;
 				}
 				i++;
-
-				while(rdbuf[i] != ' ' && rdbuf[i] != 0)
-        			{
-            				arg1[j] = rdbuf[i];
-            				i++;
-            				j++;
-        			}
-        			i++;
-        			j = 0;
-
-       				while(rdbuf[i] != ' ' && rdbuf[i] != 0)
-        			{
-            				arg2[j] = rdbuf[i];
-            				i++;
-            				j++;
-        			}
-				if(strcmp(cmd, "help") == 0)
+				/* get arg1 */
+				while (rdbuf[i] != ' ' && rdbuf[i] != 0)
 				{
-					
+					arg1[j] = rdbuf[i];
+					i++;
+					j++;
+				}
+				i++;
+				j = 0;
+				/* get arg2 */
+				while (rdbuf[i] != ' ' && rdbuf[i] != 0)
+				{
+					arg2[j] = rdbuf[i];
+					i++;
+					j++;
+				}
+
+				/* welcome */
+				if (strcmp(cmd, "welcome") == 0)
+				{
+					welcome();
+				}
+				/* clear screen */
+				else if (strcmp(cmd, "clear") == 0)
+				{
+					clear();
+					welcome();
+				}
+				/* show process */
+				else if (strcmp(cmd, "proc") == 0)
+				{
+					showProcess();
+				}
+				// kill a process
+				else if (strcmp(cmd, "kill") == 0)
+				{
+					// printf("Process killed successfullly, pid: %s\n", arg1);
+					killProcess(arg1);
+				}
+				else if (strcmp(cmd, "mkpro") == 0)
+				{
+					makeProcess(arg1);
+				}
+				/* show help message */
+				else if (strcmp(cmd, "help") == 0)
+				{
 					help();
 				}
-				else if(strcmp(cmd, "clear") == 0)
+				/* create a file */
+				else if (strcmp(cmd, "mkfile") == 0)
 				{
-					clean();
+					if (arg1[0] == '#')
+					{
+						printf("Irregular filename!");
+						continue;
+					}
+
+					strcpy(filepath, location);
+					getFilepath(filepath, arg1);
+					printf("%s  %s\n", arg1, arg2);
+					createFile(filepath, arg1, arg2);
+					memset(filepath, 0, MAX_FILENAME_LEN);
 				}
-				else if(strcmp(cmd, "reset") == 0)
+				/* create a dir */
+				else if (strcmp(cmd, "mkdir") == 0)
 				{
-					reset();
+					if (arg1[0] == '#')
+					{
+						printf("Irregular dirname!");
+						continue;
+					}
+
+					strcpy(filepath, location);
+					getDirFilepath(filepath, arg1);
+					createDir(filepath, arg1);
+					memset(filepath, 0, MAX_FILENAME_LEN);
 				}
-				else if(strcmp(cmd, "uname") == 0)
+				/* read a file */
+				else if (strcmp(cmd, "read") == 0)
 				{
-					printf("YBJ Operater System\n");
+					if (arg1[0] == '#')
+					{
+						printf("Irregular filename!");
+						continue;
+					}
+					readFile(arg1);
+					memset(filepath, 0, MAX_FILENAME_LEN);
 				}
-				else if(strcmp(cmd, "pidof") == 0)
+				/* edit a file cover */
+				else if (strcmp(cmd, "edit") == 0)
 				{
-					int pid=pidof(arg1);
-					if(pid==-1)
-						printf("There is no such process named %s!\n",arg1);
-					else
-						printf("%d\n",pid);
+					if (arg1[0] == '#')
+					{
+						printf("Irregular filename!");
+						continue;
+					}
+					strcpy(filepath, location);
+					getFilepath(filepath, arg1);
+					editCover(filepath, arg2);
+					memset(filepath, 0, MAX_FILENAME_LEN);
 				}
-				else if(strcmp(cmd, "ls") == 0)
+				/* edit a file appand */
+				else if (strcmp(cmd, "edit+") == 0)
 				{
-					fillpath(current_path, arg1);
-					if(show_dir(buffer , arg1) != -1)
-						printf("%s\n",buffer);
-					else
-						printf("ls: %s: No such file or directory\n",arg1);
+					if (arg1[0] == '#')
+					{
+						printf("Irregular filename!");
+						continue;
+					}
+					strcpy(filepath, location);
+					getFilepath(filepath, arg1);
+					editAppand(filepath, arg2);
+					memset(filepath, 0, MAX_FILENAME_LEN);
 				}
-				else if(strcmp(cmd, "create") == 0)
+				/* delete a file */
+				else if (strcmp(cmd, "delete") == 0)
 				{
-					fillpath(current_path, arg1);
-					fd = open(arg1, O_CREAT | O_CAM);
-					if(fd != -1){
-						printf("File created: %s (fd: %d)\n", arg1,fd);
-						//close(fd);
+					if (arg1[0] == '#')
+					{
+						printf("Irregular filename!");
+						continue;
 					}
-					if(fd == -1){
-						printf("create: cannot create file %s: File exists\n",arg1);
-					}
-					if(fd == -2){
-						printf("create: cannot create file %s: File name error\n",arg1);					
-					}
+					strcpy(filepath, location);
+					getFilepath(filepath, arg1);
+					deleteFile(filepath);
+					memset(filepath, 0, MAX_FILENAME_LEN);
 				}
-				else if(strcmp(cmd, "mkdir") == 0)
+				/* delete a directory */
+				else if (strcmp(cmd, "deletedir") == 0)
 				{
-					fillpath(current_path, arg1);
-					fd = open(arg1, O_CREAT | O_DIR);
-					if(fd >= 0)
-						printf("Floder created: %s\n",arg1);
-					if(fd == -1)
-						printf("mkdir: cannot create directory %s: File exists\n",arg1);
-					if(fd == -2){
-						printf("create: cannot create file %s: File name error\n",arg1);					
+					if (arg1[0] == '#')
+					{
+						printf("Irregular filename!");
+						continue;
 					}
+					strcpy(filepath, location);
+					getDirFilepath(filepath, arg1);
+					deleteDir(filepath);
+					memset(filepath, 0, MAX_FILENAME_LEN);
 				}
-				else if(strcmp(cmd, "rm") == 0)
+				/* ls */
+				else if (strcmp(cmd, "ls") == 0)
 				{
-					fillpath(current_path, arg1);
-					fd = unlink(arg1);
-					if(fd != -1){
-						printf("File deleted: %s (fd: %d)\n", arg1,fd);
-						//close(fd);
-					}
-					if(fd == -1){
-						printf("rm: %s: No such file or it is a directory\n",arg1);
-					}
-				}		
-				else if(strcmp(cmd, "edit+") == 0)
-				{
-					fillpath(current_path, arg1);
-					fd = open(arg1, O_RDWR);
-					if(fd >= 0){
-						write(fd,arg2,-strlen(arg2));						
-						printf("File %s writed:%s  (fd: %d,length: %d)\n", arg1,arg2,fd, strlen(arg2));
-						close(fd);
-					}
-					if(fd == -1){
-						printf("edit+: %s: you cannot edit this file\n",arg1);
-					}
+					ls();
 				}
-				else if(strcmp(cmd, "edit") == 0)
+				/* cd */
+				else if (strcmp(cmd, "cd") == 0)
 				{
-					fillpath(current_path, arg1);
-					fd = open(arg1, O_RDWR);
-					if(fd >= 0){
-						write(fd,arg2,strlen(arg2));						
-						printf("File %s writed:%s  (fd: %d,length: %d)\n", arg1,arg2,fd, strlen(arg2));
-						close(fd);
+					if (arg1[0] == '#')
+					{
+						printf("Irregular filename!");
+						continue;
 					}
-					if(fd == -1){
-						printf("edit: %s: you cannot edit this file\n",arg1);
-					}
-				}
-				else if(strcmp(cmd, "read") == 0)
-				{
-					fillpath(current_path, arg1);
-					fd = open(arg1, O_RDWR);
-					if(fd >= 0){
-						int r = read(fd,buffer,-1);
-						buffer[r] = 0;				
-						printf("File %s read:%s  (fd: %d)\n", arg1,buffer,fd);
-						close(fd);
-					}
-					if(fd == -1){
-						printf("read: %s: you cannot read this file\n",arg1);
-					}
-				}
-				else if(strcmp(cmd, "rename") == 0)
-				{
-					fillpath(current_path, arg1);
-					int temp = rename(arg1,arg2);						
-					if(temp == -1){
-						printf("cd: %s: No such file or directory\n",arg1);
-					}
-					else					
-						printf("File %s rename:%s\n", arg1,arg2);
-					
-				}
-				else if(strcmp(cmd, "cd") == 0)
-				{
-					fillpath(current_path, arg1);
-					//printf("%s\n",arg1);
-					if(show_dir(buffer , arg1) != -1){
-						char* ch = current_path;
-						char* s = arg1;
-						while(*s)
-						{
-							*ch++ = *s++;
-						}
-						if(*(ch - 1) != '/')
-							*ch++ = '/';
-						*ch = 0;
-						length = strlen(current_path);	
+					else if (strcmp(arg1, "..") == 0)
+					{
+						cdback();
 					}
 					else
-						printf("cd: %s: No such file or directory\n",arg1);
+					{
+						cd(arg1);
+					}
+				}
+				else if (strcmp(cmd, "information") == 0)
+
+				{
+
+					information();
+
+				}
+
+				/* print */
+
+				else if (strcmp(cmd, "print") == 0)
+
+				{
+
+					printf("%s\n", arg1);
+
 				}
 				else
 				{
-					write(1, rdbuf, r);
-					printf(": command not find, use 'help' for help\n");
+					printf("Command not found\n");
 				}
-				
 			}
-			
 		}
 		else {
 			close(fd);
@@ -687,106 +747,964 @@ void shabby_shell(const char * tty_name)
 	close(0);
 }
 
-
-
-void eraseArray(char *arr, int length)
+/*****************************************************************************
+*								Welcome
+*****************************************************************************/
+void welcome()
 {
-    int i;
-    for (i = 0; i < length; i++)
-        arr[i] = 0;
+
+	printf("=============================================================================\n");
+	printf("       ooooo     ooooooo         ooo      oooo     ooo      ooooo    oooooooo\n");
+	printf("    oooo  oooo   ooo  oooo      ooooo     ooooo    ooo   ooooo  ooo  ooo     \n");
+	printf("   ooo      ooo  ooo   ooo      oo ooo    oooooo   ooo  ooo          ooo     \n");
+	printf("   ooo      ooo  oooooooo      oo   ooo   ooo oooo ooo  ooo  oooooo  oooooooo\n");
+	printf("   ooo      ooo  ooo oooo     ooooooooo   ooo   oooooo  ooo     ooo  ooo     \n");
+	printf("   oooo    oooo  ooo   ooo   ooo     ooo  ooo    ooooo  oooo    ooo  ooo     \n");
+	printf("     oooooooo    ooo    ooo ooo      ooo  ooo     oooo    oooooooo   oooooooo\n");
+	printf("=============================================================================\n");
+	printf("\n\n\n\n\n\n\n\n\n\n\n");
+}
+
+/*****************************************************************************
+*								Clear
+*****************************************************************************/
+void clear()
+{
+	int i = 0;
+	for (i = 0; i < 20; i++)
+		printf("\n");
+}
+
+/*****************************************************************************
+*								Quit
+*****************************************************************************/
+void off()
+{
+	return 0;
+}
+// /*****************************************************************************
+// *							  Show Process
+// *****************************************************************************/
+// void showProcess()
+// {
+// 	int i = 0;
+// 	printf("********************************************************************************\n");
+// 	printf("        name        |        priority        |        f_flags(0 is runable)        \n");
+// 	printf("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+// 	for (i = 0; i < NR_TASKS + NR_PROCS; i++)
+// 	{
+// 		printf("        %s                   %d                      %d\n", proc_table[i].name, proc_table[i].priority, proc_table[i].p_flags);
+// 	}
+// 	printf("********************************************************************************\n");
+// }
+
+/*****************************************************************************
+*							  Show Process
+*****************************************************************************/
+void showProcess()
+{
+	int i = 0;
+	printf("********************************************************************************\n");
+	printf("     id      |     name      |      priority     |       flags(0 is runable)    \n");
+	printf("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+	for (i = 0; i < NR_TASKS + NR_PROCS; i++)
+	{
+		if(proc_table[i].p_flags == FREE_SLOT) {
+			continue;
+		}
+		// char * newString = formatString(proc_table[i].name);
+		// printf("%s\n", newString);
+		printf("%s%d%s", 
+			"      ",
+			i,
+			"     ");
+		if(i < 10) {
+			printf(" ");
+		}
+		showFormatString(proc_table[i].name);
+		printf(" %d%s",
+			proc_table[i].priority, 
+			"                   ");
+		if(proc_table[i].priority < 10) {
+			printf(" ");
+		}
+		printf("%d\n", proc_table[i].p_flags);
+	}
+	printf("********************************************************************************\n");
+}
+
+/*****************************************************************************
+*							  kill Process
+*****************************************************************************/
+void killProcess(char str[])
+{
+	// call a function str2Int() to transfer char[] to int, defined in klib.c
+	int i = str2Int(str);
+	// printf("pid is(in INT form: %d\n", i);
+	if(i >= NR_TASKS + NR_PROCS || i < 0) {
+		printf("Error! Pid %d exceeded the range\n", i);
+	}
+	else if(i < NR_TASKS) {
+		printf("System tasks cannot be killed.\n");
+	}
+	else if(proc_table[i].priority == 0 || proc_table[i].p_flags == FREE_SLOT) 
+	{
+		printf("Process with pid = %d not found.\n", i);
+	}
+	else {
+		proc_table[i].priority = 0;
+		proc_table[i].p_flags = FREE_SLOT;
+		printf("Process with pid = %d is finished.\n", i);	
+	}
+}
+
+/*****************************************************************************
+*							  folk new Process
+*****************************************************************************/
+void makeProcess(char str[])
+{
+	int pid = fork();
+	int childPID;
+	for(int i = 0; i < NR_TASKS + NR_PROCS; i++)
+	{
+		if(proc_table[i].p_flags == FREE_SLOT)
+		{
+			childPID = i;
+			break;
+		}
+	}
+	if(getSize(str) <= 0) {
+		strcpy(str, "Unnamed");
+	}
+	if (pid != 0) { /* parent */
+		childPID = pid;
+		int s;
+		wait(&s);
+	}
+	else {	/* child */
+		// printf("priority: %d, pid: %d, \n", proc_table[childPID].priority, childPID);
+		printf("successfullly make a new process.\n");
+		strcpy(proc_table[childPID].name, str);
+		proc_table[childPID].p_flags = RECEIVING;
+		proc_table[childPID].priority = 5;
+	}
+	showProcess();
 }
 
 
+/*****************************************************************************
+*							Show Help Message
+*****************************************************************************/
+void help()
+{
+	printf("===============================================================================\n");
+	printf("        name                   |                      function                      \n");
+	printf("===============================================================================\n");
+	printf("        welcome                |       Welcome the users\n");
+	printf("        clear                  |       Clean the screen\n");
+	printf("        ls                     |       List all files in current file path\n");
+	printf("        help                   |       List all commands\n");
+	printf("        proc                   |       List all process's message\n");
+	printf("        kill   [id]            |       kill a process with this pid\n");
+	printf("        mkpro  [name]          |       folk and start a new process\n");
+	printf("        mkdir  [name]          |       Create a directory\n");
+	printf("        mkfile [file][str]     |       Create a file\n");
+	printf("        read   [file]          |       Read a file\n");
+	printf("        delete [file]          |       Delete a file\n");
+	printf("        deletedir [file]       |       Delete a directory\n");
+	printf("        edit   [file][str]     |       Edit file, cover the content\n");
+	printf("        edit+  [file][str]     |       Edit file, appand after the content\n");
+	printf("===============================================================================\n");
+
+}
 
 /*****************************************************************************
- *                                Init
+*								Colorful
+*****************************************************************************/
+void colorful()
+{
+	int j = 0;
+	for (j = 0; j < 2800; j++) { disp_str(" "); }
+	disp_color_str("                       oo", YELLOW);
+	disp_color_str("oooooooooooo", LIGHT);
+	disp_color_str("oooo", LIGHT);
+	disp_color_str("oooooooooo", LIGHT);
+	disp_color_str("oo                   \n", YELLOW);
+	disp_color_str("                       oo", YELLOW);
+	disp_color_str("oooooooooooooooooooooooooo", LIGHT);
+	disp_color_str("oo                   \n", YELLOW);
+	disp_color_str("                        oo", YELLOW);
+	disp_color_str("oooooooooooooooooooooooo", LIGHT);
+	disp_color_str("oo                   \n", YELLOW);
+	disp_color_str("                         oo", YELLOW);
+	disp_color_str("oooooooooooooooooooooo", LIGHT);
+	disp_color_str("oo                    \n", YELLOW);
+	disp_color_str("                          oo", YELLOW);
+	disp_color_str("ooooooooooooooooooooo", LIGHT);
+	disp_color_str("o                      \n", YELLOW);
+	disp_color_str("                           oo", YELLOW);
+	disp_color_str("ooooooooooooooooo", LIGHT);
+	disp_color_str("oo                       \n", YELLOW);
+	disp_color_str("                             oo", YELLOW);
+	disp_color_str("ooooooooooooo", LIGHT);
+	disp_color_str("oo                          \n", YELLOW);
+	disp_color_str("                               ooooooooooooo                              \n", YELLOW);
+	for (j = 0; j < 3; j++)
+		disp_color_str("oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo", BLUE);
+	disp_color_str("        ooooo     ooooooo         ooo      oooo     ooo      ooooo    oooooooo\n", RED);
+	disp_color_str("     oooo  oooo   ooo  oooo      ooooo     ooooo    ooo   ooooo  ooo  ooo     \n", RED);
+	disp_color_str("    ooo      ooo  ooo   ooo      oo ooo    oooooo   ooo  ooo          ooo     \n", RED);
+	disp_color_str("    ooo      ooo  oooooooo      oo   ooo   ooo oooo ooo  ooo  oooooo  oooooooo\n", RED);
+	disp_color_str("    ooo      ooo  ooo oooo     ooooooooo   ooo   oooooo  ooo     ooo  ooo     \n", RED);
+	disp_color_str("    oooo    oooo  ooo   ooo   ooo     ooo  ooo    ooooo  oooo    ooo  ooo     \n", RED);
+	disp_color_str("      oooooooo    ooo    ooo ooo      ooo  ooo     oooo    oooooooo   oooooooo\n", RED);
+
+	for (j = 0; j < 3; j++)
+		disp_color_str("oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo", BLUE);
+	for (j = 0; j < 300; j++)
+		disp_str(" ");
+	milli_delay(80000);
+
+}
+
+/*****************************************************************************
+ *                                animation
  *****************************************************************************/
 /**
- * The hen.
- * 
+ * An animation 
+ *
  *****************************************************************************/
-void Init()
+PUBLIC void animation()
 {
-	int fd_stdin  = open("/dev_tty0", O_RDWR);
-	assert(fd_stdin  == 0);
-	int fd_stdout = open("/dev_tty0", O_RDWR);
-	assert(fd_stdout == 1);
 
-	printf("Init() is running ...\n");
+int i = 0;
+//reset();
+clear();
 
-	/* extract `cmd.tar' */
-	untar("/cmd.tar");
-			
+printf("                     NNN     NN                         NNN                     ");
+printf("                     NN     NN                           NN                     ");
+printf("                     NN    7N                   N        NN                     ");
+printf("                     NN    NN                  NN        NN                     ");
+printf("                    HNN    NN                 QNNNQ      NNC                    ");
+printf("                    NNN    >N!                NNNNN      NNQ                    ");
+printf("                    NNN     NN:              NNNNNNN     NNH                    ");
+printf("                    NNN      NNN-          NNNNNNNNN     NNO                    ");
+printf("                    7NN       QNNNNNN-   QNNNNNNNN>      NN-                    ");
+printf("                     NN        NNNNNNNNNNNNNNNNNN      -NNN                     ");
+printf("                     NN        NNNNNNNNNNNNNNNNNNNN  :NNNNN                     ");
+printf("                     NNQ  $NNNNNNNNNNNNNNNNNNNNNNNNNNNNONNN                     ");
+printf("                     QNN  NNNNNNNNNNNNNNNNNNNNNNNNNNN   NNC                     ");
+printf("                      NN ?NNHNNNNNNNNNNNNNNNNNN        -NN                      ");
+printf("                      NNNNN     NNNN NNNNNNNNNN        NNN                      ");
+printf("                       NNNN    NNNNH   NNN??NN        $NN                       ");
+printf("                       NNNN    NNN-        HNN        NNH                       ");
+printf("                        NNN    NN          CNN       NNN                        ");
+printf("                         NNN   NN           NN      NNN                         ");
+printf("                          NNN  NN           ?NN    NNN                          ");
+printf("                           NNN>-N            NNC ?NNN                           ");
+printf("                            NNNNNN            NNNNNN                            ");
+printf("                             NNNNNC          $NNNNN                             ");
+printf("                               NNNNNNNNNNNNNNNNNN                               ");
+printf("                                 NNNNNNNNNNNNNN                                 ");
 
-	char * tty_list[] = {"/dev_tty1", "/dev_tty2"};
+milli_delay(10000);
 
-	int i;
-	for (i = 0; i < sizeof(tty_list) / sizeof(tty_list[0]); i++) {
-		int pid = fork();
-		if (pid != 0) { /* parent process */
-			printf("[parent is running, child pid:%d]\n", pid);
+
+//reset();
+clear();
+
+printf("                     NNN     NN                         NNN                     ");
+printf("                     NN     NN                          .NN                     ");
+printf("                     NN    ;N                   N        NN                     ");
+printf("                    7NN    NN                 .NN        NN-                    ");
+printf("                    NNN    NN                 $NNN-      NNO                    ");
+printf("                    NNN    ;N$                NNNNN      NNN                    ");
+printf("                    NNN     NN7              NNNNNNH     NNN                    ");
+printf("                    NNN      NNN-         ;NNNNNNNNN     NNQ                    ");
+printf("                    CNN       $NNNNNN7   NNNNNNNNNN      NN!                    ");
+printf("                     NN        NNNNNNNNNNNNNNNNNN        NN                     ");
+printf("                     NN        NNNNNNNNNNNNNNNNNN-       NN                     ");
+printf("                     NNH     $NNNNNNNNNNNNNNNNNNNN      NNN                     ");
+printf("                     NNN   QNNNNNNNNNNNNNNNNNNNNNNN     NNO                     ");
+printf("                      NN.  NNNNNNNNNNNNNNNNNNNNNNNNNN NNNN                      ");
+printf("                      NNN   NNNNNNNN !NNNNNNNNN>  NNNNNNNN                      ");
+printf("                       NN?  NNNNQ-     $H?  NNN     7QNNN                       ");
+printf("                       NNN   NN             NNN       NNN                       ");
+printf("                        NNN  NN              NN      NNN                        ");
+printf("                         NNN NN              NN     NNN                         ");
+printf("                          NNNNN               NN   NNN                          ");
+printf("                           NNNNN              NN CNNN                           ");
+printf("                            NNNN               -NNNN                            ");
+printf("                             NNNNNO          $NNNNN                             ");
+printf("                               NNNNNNNNNNNNNNNNNN                               ");
+printf("                                 NNNNNNNNNNNNNN                                 ");
+
+milli_delay(10000);
+
+//reset();
+clear();
+
+printf("                     NNN     NN                         NNN                     ");
+printf("                     NN     NN                           NN                     ");
+printf("                     NN     N:                  N        NN                     ");
+printf("                    7NN    >N                 .$N        NN-                    ");
+printf("                    NNN    :N                  NNNN      NNO                    ");
+printf("                    NNN     NN                NNNNNQ     NNN                    ");
+printf("                    NNN     NNN              NNNNNNN     NNN                    ");
+printf("                    NNN      ONNQ;?>       NNNNNNNNN     NNQ                    ");
+printf("                    CNN        NNNNNNN.  QNNNNNNNNN!     NN!                    ");
+printf("                     NN        QNNNNNNNNNNNNNNNNN        NN                     ");
+printf("                     NN        NNNNNNNNNNNNNNNNNN        NN                     ");
+printf("                     NNH       NNNNNNNNNNNNNNNNNN       NNN.                    ");
+printf("                     NNN      NNNNNNNNNNNNNNNNNNN       NNO                     ");
+printf("                      NN     NNNNNNNNNNNNNNNNNNNN>     -NN.                     ");
+printf("                      NNN    NNNNNNN  NNNNNNNN NNN     NNN                      ");
+printf("                       NN?  !NN NNN         NN ;NNO   $NN                       ");
+printf("                       NNN  QNN NNN         NNNNNNNNNNNNN                       ");
+printf("                        NNN QN   HNN        !NNNNNNNNNNN                        ");
+printf("                         NNN7N     NN               NNN                         ");
+printf("                          NNNNN     N              NNN                          ");
+printf("                           NNNN     !            CNNN                           ");
+printf("                            NNNN                NNNN                            ");
+printf("                             NNNNNO          $NNNNN                             ");
+printf("                               NNNNNNNNNNNNNNNNNN                               ");
+printf("                                 NNNNNNNNNNNNNN                                 ");
+
+milli_delay(10000);
+
+
+//reset();
+clear();
+
+printf("                     NNN     $N                         NNN                     ");
+printf("                     NN     NN;                          NN                     ");
+printf("                     NN     NQ                  N        NN                     ");
+printf("                    7NN    !N                  QN        NN-                    ");
+printf("                    NNN    >N                  NNN$      NNO                    ");
+printf("                    NNN     NN                NNNNN$     NNN                    ");
+printf("                    NNN     NNO              -NNNNNN     NNN                    ");
+printf("                    NNN      NNN           NNNNNNNNN     NNQ                    ");
+printf("                    CNN       ;NNNNNNN    NNNNNNNNN7     NN!                    ");
+printf("                     NN        NNNNNNNNNNNNNNNNNN7       NN                     ");
+printf("                     NN        NNNNNNNNNNNNNNNNNN   :NN  NN                     ");
+printf("                     NNH      NNNNNNNNNNNNNNNNNNNN NNN  NNN                     ");
+printf("                     NNN    HNNNNNNNNNNNNNNNNNNNNNNNH   NNO                     ");
+printf("                      NN    NNNNNNNNNNNNNNNNNNNNNNNQ   -NN                      ");
+printf("                      NNN  ?NN  NNNQ ?NNNNNNNNNN       NNN                      ");
+printf("                       NN? NN7  NNN    >NQ!  NNN      $NN                       ");
+printf("                       NNN NN   NNC           NN$     NNN                       ");
+printf("                        NNNNN   NNH           NNN    NNN                        ");
+printf("                         NNNN    NN            NNNNNNNN                         ");
+printf("                          NNN    NN             7NNNNN                          ");
+printf("                           NNN>   NN             CNNN                           ");
+printf("                            NNNN   N            NNNN                            ");
+printf("                             NNNNNO          $NNNNN                             ");
+printf("                               NNNNNNNNNNNNNNNNNN                               ");
+printf("                                 NNNNNNNNNNNNNN                                 ");
+
+milli_delay(10000);
+
+//reset();
+clear();
+
+}
+
+
+
+/*****************************************************************************
+
+*								Information
+
+*****************************************************************************/
+
+void information()
+
+{
+
+	printf(" MEMORYSIZE:%dMB\n", memory_size / (1024 * 1024));
+
+	printf(" STACK_SIZE_TOTAL:%dMB\n", STACK_SIZE_TOTAL / (1024 * 1024));
+
+	printf(" MMBUF_SIZE:%dMB\n", MMBUF_SIZE / (1024 * 1024));
+
+	printf(" FSBUF_SIZE:%dMB\n", FSBUF_SIZE / (1024 * 1024));
+
+
+
+}
+/*****************************************************************************
+*							File System
+*****************************************************************************/
+
+/*****************************************************************************
+*								Init FS
+*****************************************************************************/
+void initFS()
+{
+	int fd = -1, n = 0;
+	char bufr[1024];
+	char filepath[MAX_FILENAME_LEN];
+	char dirpath[MAX_FILENAME_LEN];
+	char filename[MAX_FILENAME_LEN];
+
+	memset(filequeue, 0, MAX_FILES);
+	memset(dirqueue, 0, MAX_DIRS);
+
+	fd = open("root", O_CREAT | O_RDWR);
+	close(fd);
+
+	fd = open("root", O_RDWR);
+	write(fd, bufr, 1024);
+	close(fd);
+
+	/*fd = open("root", O_RDWR);
+	n = read(fd, bufr, 1024);
+	close(fd);
+
+	int i, k;
+	for (i = 0, k = 0; i < n; i++)
+	{
+
+		if (bufr[i] != ' ')
+		{
+			filepath[k] = bufr[i];
+			k++;
 		}
-		else {	/* child process */
-			printf("[child is running, pid:%d]\n", getpid());
-			close(fd_stdin);
-			close(fd_stdout);
-			
-			shabby_shell(tty_list[i]);
-			assert(0);
+		else
+		{
+			while (bufr[i] == ' ')
+				i++;
+
+			if (strcmp(filepath, "") == 0)
+				continue;
+
+			getDirpathAndFilename(dirpath, filename, filepath);
+			if (filename[0] == '#')
+			{
+				strcpy(dirs[dircount], filepath);
+				dirqueue[dircount] = 1;
+				dircount++;
+			}
+			else
+			{
+				strcpy(dirs[dircount], filepath);
+				filequeue[filecount] = 1;
+				filecount++;
+			}
+
+			fd = open(filepath, O_CREAT | O_RDWR);
+			close(fd);
+
+			k = 0;
+
+			if (bufr[i] == 0)
+				break;
+
+			i--;
 		}
-	}
-	//animation();
-
-	while (1) {
-		int s;
-		int child = wait(&s);
-		printf("child (%d) exited with status: %d.\n", child, s);
-	}
-
-	assert(0);
-}
-
-
-/*======================================================================*
-                               TestA
- *======================================================================*/
-void TestA()
-{
-	for(;;);
-}
-
-/*======================================================================*
-                               TestB
- *======================================================================*/
-void TestB()
-{
-	for(;;);
-}
-
-/*======================================================================*
-                               TestB
- *======================================================================*/
-void TestC()
-{
-	for(;;);
+	}*/
 }
 
 /*****************************************************************************
- *                                panic
- *****************************************************************************/
-PUBLIC void panic(const char *fmt, ...)
+*							Identity a Directory
+*****************************************************************************/
+int isDir(const char * filepath)
 {
-	int i;
-	char buf[256];
-
-	/* 4 is the size of fmt in the stack */
-	va_list arg = (va_list)((char*)&fmt + 4);
-
-	i = vsprintf(buf, fmt, arg);
-
-	printl("%c !!panic!! %s", MAG_CH_PANIC, buf);
-
-	/* should never arrive here */
-	__asm__ __volatile__("ud2");
+	int pos = getPosInDirQueue(filepath);
+	if (pos != -1)
+	{
+		return 1;
+	}
+	return 0;
 }
 
+/*****************************************************************************
+*                             Get Filepath
+*****************************************************************************/
+void getFilepath(char *filepath, char * filename)
+{
+	strjin(filepath, filename, '_');
+}
+
+/*****************************************************************************
+*                         Get Directory Filepath
+*****************************************************************************/
+void getDirFilepath(char *filepath, char * filename)
+{
+	strcat(filepath, "_");
+	strjin(filepath, filename, '#');
+}
+
+/*****************************************************************************
+*                   Get Dirpath And Filename/Dirname From Filepath
+*****************************************************************************/
+void getDirpathAndFilename(char * dirpath, char * filename, char * filepath)
+{
+
+	char str[MAX_FILENAME_LEN];
+	int i, k;
+
+	memset(dirpath, 0, MAX_FILENAME_LEN);
+	memset(filename, 0, MAX_FILENAME_LEN);
+
+	for (i = 0, k = 0; filepath[i] != 0; i++)
+	{
+		if (filepath[i] != '_')
+		{
+			str[k] = filepath[i];
+			k++;
+		}
+		else
+		{
+			strcat(dirpath, str);
+			strcat(dirpath, "_");
+			memset(str, 0, MAX_FILENAME_LEN);
+			k = 0;
+		}
+	}
+	dirpath[strlen(dirpath) - 1] = 0;
+	strcpy(dirpath, dirpath);
+	strcpy(filename, str);
+
+}
+
+/*****************************************************************************
+*						Get a Free Pos in FileQueue
+*****************************************************************************/
+int getFreeFilePos()
+{
+	int i = 0;
+	for (i = 0; i < MAX_FILES; i++)
+	{
+		if (filequeue[i] == 0)
+			return i;
+	}
+	printf("The number of files is full!!\n");
+	return -1;
+}
+
+/*****************************************************************************
+*						Get a Free Pos in DirQueue
+*****************************************************************************/
+int getFreeDirPos()
+{
+	int i = 0;
+	for (i = 0; i < MAX_DIRS; i++)
+	{
+		if (dirqueue[i] == 0)
+			return i;
+	}
+	printf("The number of folders is full!!\n");
+	return -1;
+}
+
+/*****************************************************************************
+*						Get Dir's Pos in FileQueue
+*****************************************************************************/
+int getPosInDirQueue(char * filepath)
+{
+	int i = 0;
+	for (i = 0; i < MAX_FILES; i++)
+	{
+		if (strcmp(dirs[i], filepath) == 0)
+			return i;
+	}
+	return -1;
+}
+
+
+/*****************************************************************************
+*						Add Filename Into Dir
+*****************************************************************************/
+void addFileIntoDir(const char * dirpath, char * filename)
+{
+	int fd = -1;
+
+	if (strcmp(dirpath, "root") == 0)
+	{
+		fd = open("root", O_RDWR);
+		
+	}
+	else
+	{
+		fd = open(dirpath, O_RDWR);
+	}
+
+	if (fd == -1)
+	{
+		printf("%s has not been found!\n", dirpath);
+		return;
+	}
+
+	strcat(filename, " ");
+	editAppand(dirpath, filename);
+}
+
+/*****************************************************************************
+*						Delete Filename From Dir
+*****************************************************************************/
+void deleteFileFromDir(const char * dirpath, char * filename)
+{
+
+	/*char bufr[MAX_USER_FILE * MAX_FILENAME_LEN];
+	char bufw[MAX_USER_FILE * MAX_FILENAME_LEN];*/
+	char bufr[1024];
+	char bufw[1024];
+	char buf[MAX_FILENAME_LEN];
+	int fd = -1, n = 0;
+
+	fd = open(dirpath, O_RDWR);
+
+	if (fd == -1)
+	{
+		printf("%s has not been found!!\n", dirpath);
+		return;
+	}
+
+	n = read(fd, bufr, 1024);
+
+	int i, k;
+	for (i = 0, k = 0; i < n; i++)
+	{
+		if (bufr[i] != ' ')
+		{
+			buf[k] = bufr[i];
+			k++;
+		}
+		else
+		{
+			buf[k] = 0;
+			k = 0;
+
+			if (strcmp(buf, filename) == 0)
+				continue;
+
+			strcat(bufw, buf);
+			strcat(bufw, " ");
+		}
+	}
+	printf("%s\n", bufw);
+	
+	editCover(dirpath, bufw);
+
+	close(fd);
+}
+
+/*****************************************************************************
+*							 Create File
+*****************************************************************************/
+void createFile(char * filepath, char *filename, char * buf)
+{
+	int fd = -1, pos = -1;
+	
+	fd = open(filepath, O_CREAT | O_RDWR);
+	printf("file name: %s\n content: %s\n", filename, buf);
+	if (fd == -1)
+	{
+		printf("New file failed. Please check and try again!!\n");
+		return;
+	}
+	else if (fd == -2)
+	{
+		printf("File already exist!!\n");
+		return;
+	}
+
+	write(fd, buf, strlen(buf));
+	close(fd);
+
+	pos = getFreeFilePos();
+	filequeue[pos] = 1;
+	strcpy(files[pos], filepath);
+	filecount++;
+
+	addFileIntoDir(location, filename);
+}
+
+/*****************************************************************************
+*							 Create Directory
+*****************************************************************************/
+void createDir(char * filepath, char *filename)
+{
+	int fd = -1, pos = -1;
+
+	fd = open(filepath, O_CREAT | O_RDWR);
+	printf("Folder name: %s\n", filename);
+	if (fd == -1)
+	{
+		printf("New folder failed. Please check and try again!!\n");
+		return;
+	}
+	else if (fd == -2)
+	{
+		printf("Folder already exists!!\n");
+		return;
+	}
+
+	close(fd);
+
+	pos = getFreeDirPos();
+	dirqueue[pos] = 1;
+	strcpy(dirs[pos], filepath);
+	dircount++;
+
+
+	char str[MAX_FILENAME_LEN] = "#";
+	strcat(str, filename);
+	addFileIntoDir(location, str);
+}
+
+/*****************************************************************************
+*								Read File
+*****************************************************************************/
+void readFile(char * filename)
+{
+	char filepath[MAX_FILENAME_LEN];
+	strcpy(filepath, location);
+	getDirFilepath(filepath, filename);
+	if (isDir(filepath))
+	{
+		printf("Cannot read folder!!\n");
+		return;
+	}
+
+	int fd = -1;
+	int n;
+	char bufr[1024] = "";
+
+	strcpy(filepath, location);
+	getFilepath(filepath, filename);
+	fd = open(filepath, O_RDWR);
+	if (fd == -1)
+	{
+		printf("Opening file error. Please check and try again!\n");
+		return;
+	}
+
+	n = read(fd, bufr, 1024);
+	bufr[n] = 0;
+	printf("%s(fd=%d) : %s\n", filepath, fd, bufr);
+	close(fd);
+}
+
+/*****************************************************************************
+*							Edit File Cover
+*****************************************************************************/
+void editCover(const char * filepath, char * str)
+{
+	char empty[1024];
+	int fd = -1;
+	fd = open(filepath, O_RDWR);
+	if (fd == -1)
+	{
+
+		printf("Opening file error. Please check and try again!!\n");
+		return;
+	}
+	memset(empty, 0, 1024);
+	write(fd, empty, 1024);
+	close(fd);
+	fd = open(filepath, O_RDWR);
+	write(fd, str, strlen(str));
+	close(fd);
+}
+
+/*****************************************************************************
+*							Edit File Appand
+*****************************************************************************/
+void editAppand(const char * filepath, char * str)
+{
+	int fd = -1;
+	char bufr[1024];
+	char empty[1024];
+
+	fd = open(filepath, O_RDWR);
+	if (fd == -1)
+	{
+		printf("Opening file error. Please check and try again!!\n");
+		return;
+	}
+
+	read(fd, bufr, 1024);
+	close(fd);
+
+	fd = open(filepath, O_RDWR);
+	write(fd, empty, 1024);
+	close(fd);
+
+	strcat(bufr, str);
+
+	fd = open(filepath, O_RDWR);
+	write(fd, bufr, strlen(bufr));
+	close(fd);
+}
+/*****************************************************************************
+*							   Delete File
+*****************************************************************************/
+void deleteFile(char * filepath)
+{
+	if (filecount == 0)
+	{
+		printf("Error, no file to delete!\n");
+		return;
+	}
+
+	if (unlink(filepath) != 0)
+	{
+		printf("Deleting file error. Please check and try again!\n");
+		return;
+	}
+
+	int i;
+	for (i = 0; i < filecount; i++)
+	{
+		if (strcmp(files[i], filepath) == 0)
+		{
+			memset(files[i], 0, MAX_FILENAME_LEN);
+			filequeue[i] = 0;
+			filecount--;
+			break;
+		}
+	}
+
+	/* delete filename from user's dir */
+	char dirpath[MAX_FILENAME_LEN];
+	char filename[MAX_FILENAME_LEN];
+	getDirpathAndFilename(dirpath, filename, filepath);
+
+	deleteFileFromDir(dirpath, filename);
+}
+
+/*****************************************************************************
+*							 Delete Directory
+*****************************************************************************/
+void deleteDir(char * filepath)
+{
+	if (dircount == 0)
+	{
+		printf("Error, no folder to delete!!\n");
+		return;
+	}
+
+	char dirfile[MAX_FILENAME_LEN];
+	char rdbuf[1024];
+	int fd = -1, n = 0;
+	char filename[MAX_FILENAME_LEN];
+	fd = open(filepath, O_RDWR);
+	if (fd == -1)
+	{
+		printf("Deleting folder error. Please check and try again!!\n");
+		return;
+	}
+
+	n = read(fd, rdbuf, 1024);
+
+	int i, k;
+	for (i = 0, k = 0; i < n; i++)
+	{
+
+		if (rdbuf[i] != ' ')
+		{
+			dirfile[k] = rdbuf[i];
+			k++;
+		}
+		else
+		{
+			dirfile[k] = 0;
+			k = 0;
+
+			char path[MAX_FILENAME_LEN];
+			strcpy(path, filepath);
+			strjin(path, filename, '_');
+
+			if (dirfile[0] == '#')
+			{
+				deleteDir(path);
+			}
+			else
+			{
+				deleteFile(path);
+			}
+		}
+	}
+	close(fd);
+
+	if (unlink(filepath) != 0)
+	{
+		printf("Deleting folder error. Please check and try again!\n");
+		return;
+	}
+
+	for (i = 0; i < dircount; i++)
+	{
+		if (strcmp(dirs[i], filepath) == 0)
+		{
+			memset(dirs[i], 0, MAX_FILENAME_LEN);
+			dirqueue[i] = 0;
+			dircount++;
+			break;
+		}
+	}
+
+	char dirpath[MAX_FILENAME_LEN];
+
+	getDirpathAndFilename(dirpath, filename, filepath);
+	deleteFileFromDir(dirpath, filename);
+}
+
+/*****************************************************************************
+*						List All Files in the Directory
+*****************************************************************************/
+void ls()
+{
+	int fd = -1;
+	char bufr[1024];
+
+	fd = open(location, O_RDWR);
+
+	if (fd == -1)
+	{
+		printf("Error opening file\n");
+		return;
+	}
+
+	read(fd, bufr, 1024);
+	printf("%s\n", bufr);
+	close(fd);
+}
+
+/*****************************************************************************
+*									cd
+*****************************************************************************/
+void cd(char * dirname)
+{
+	char filepath[MAX_FILENAME_LEN];
+	strcpy(filepath, location);
+	getDirFilepath(filepath, dirname);
+	if (!isDir(filepath))
+	{
+		printf("NO folder %s!\n", dirname);
+		return;
+	}
+
+	strcat(location, "_");
+	strcat(location, dirname);
+}
+
+/*****************************************************************************
+*							Go Back To Previous Directory
+*****************************************************************************/
+void cdback()
+{
+	if (strcmp(location, "root") == 0)
+	{
+		printf("ROOT");
+		return;
+	}
+
+	char dirpath[MAX_FILENAME_LEN];
+	char filename[MAX_FILENAME_LEN];
+
+	getDirpathAndFilename(dirpath, filename, location);
+	strcpy(location, dirpath);
+}

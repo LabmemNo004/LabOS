@@ -44,16 +44,3 @@ PUBLIC int read(int fd, void *buf, int count)
 
 	return msg.CNT;
 }
-
-PUBLIC int show_dir(char* buf,char* pathname)
-{
-	MESSAGE msg;
-	msg.type = SHOW;
-	msg.PATHNAME	= (void*)pathname;
-	msg.BUF		= buf;
-	msg.NAME_LEN	= strlen(pathname);
-	
-	send_recv(BOTH, TASK_FS, &msg);
-	
-	return msg.RETVAL;
-}

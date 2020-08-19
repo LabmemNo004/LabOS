@@ -88,7 +88,7 @@ PUBLIC int execv(const char *path, char * argv[])
 	msg.NAME_LEN	= strlen(path);
 	msg.BUF		= (void*)arg_stack;
 	msg.BUF_LEN	= stack_len;
-	//printl("%s\n%d\n",path,msg.NAME_LEN);
+
 	send_recv(BOTH, TASK_MM, &msg);
 	assert(msg.type == SYSCALL_RET);
 

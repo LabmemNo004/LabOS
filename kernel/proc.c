@@ -22,10 +22,6 @@ PRIVATE void unblock(struct proc* p);
 PRIVATE int  msg_send(struct proc* current, int dest, MESSAGE* m);
 PRIVATE int  msg_receive(struct proc* current, int src, MESSAGE* m);
 PRIVATE int  deadlock(int src, int dest);
-PUBLIC int	isEmpty(QUEUE*	q);
-PRIVATE struct proc* get_proc(QUEUE* q);
-PUBLIC	void	append_proc(struct proc* p, QUEUE* q);
-PUBLIC int	isFull(QUEUE*	q);
 
 /*****************************************************************************
  *                                schedule
@@ -35,100 +31,24 @@ PUBLIC int	isFull(QUEUE*	q);
  * 
  *****************************************************************************/
 PUBLIC void schedule()
-{		
-	struct proc* p;
-	QUEUE*	q;
-	q = queue_table + NR_QUEUE;
-	struct proc** pp;
-	pp = q->p_head;
-	while(pp!=q->p_tail){
-		p = *(q->p_tail);
-		//disp_int(p->p_recvfrom);
-		//disp_str(" ");
-		if(p->p_flags == FREE_SLOT){
-				get_proc(q);
-				continue;
+{
+	struct proc*	p;
+	int		greatest_ticks = 0;
+
+	while (!greatest_ticks) {
+		for (p = &FIRST_PROC; p <= &LAST_PROC; p++) {
+			if (p->p_flags == 0) {
+				if (p->ticks > greatest_ticks) {
+					greatest_ticks = p->ticks;
+					p_proc_ready = p;
+				}
 			}
-		if(p->p_flags == 0){
-			append_proc(get_proc(q),queue_table);
-			continue;	
 		}
-		append_proc(get_proc(q),q);
-	}
-	p = 0;
-	for (q = queue_table; q < queue_table+NR_QUEUE; q++) {		
-		if (!isEmpty(q)) {
-			p =*(q->p_tail);
-			//disp_int(p->type);
-			//disp_str(" ");
-			if(p->p_flags == FREE_SLOT){
-				get_proc(q);
-				q--;
-				continue;				
-			}
-			if(p->ticks == 0 && q->priority != 100){
-				if((q+1)->priority == 100 && p->type == 15)
-					append_proc(get_proc(q),queue_table);
-				else
-					append_proc(get_proc(q),q + 1);
-				q--;
-				continue;
-			}
-			if(p->p_flags != 0){
-				append_proc(get_proc(q),queue_table + NR_QUEUE);
-				q--;
-				continue;
-			}
-			p = *(q->p_tail);
-			break;
-		}
-	}
-	p_proc_ready = p;
-	//assert(0);
-}
 
-/*======================================================================*
-                           queue's operation
- *======================================================================*/
-
-
-PUBLIC int	isEmpty(QUEUE*	q)
-{
-	if(q->count == 0)
-		return 1;
-	return 0;
-}
-
-PUBLIC int	isFull(QUEUE*	q)
-{
-	if(q->count == NR_PROCS)
-		return 1;
-	return 0;
-}
-PRIVATE struct proc* get_proc(QUEUE* q)
-{
-	struct proc* p;
-	if(!isEmpty(q))
-	{
-		p = *(q->p_tail);
-		q->p_tail++;
-		if(q->p_tail == NR_PROCS + q->buf)
-			q->p_tail = q->buf;
-		q->count--;
-		return p;
-	}
-	return 0;
-}
-PUBLIC	void	append_proc(struct proc* p, QUEUE* q){
-	if(!isFull(q))
-	{
-		*(q->p_head) = p;
-		p->ticks = p->priority = q->priority;
-		q->p_head++;
-		//disp_int(p->ticks);
-		if(q->p_head == NR_PROCS + q->buf)
-			q->p_head = q->buf;
-		q->count++;
+		if (!greatest_ticks)
+			for (p = &FIRST_PROC; p <= &LAST_PROC; p++)
+				if (p->p_flags == 0)
+					p->ticks = p->priority;
 	}
 }
 

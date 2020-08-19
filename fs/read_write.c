@@ -49,6 +49,7 @@ PUBLIC int do_rdwt()
 	int pos = pcaller->filp[fd]->fd_pos;
 
 	struct inode * pin = pcaller->filp[fd]->fd_inode;
+
 	assert(pin >= &inode_table[0] && pin < &inode_table[NR_INODE]);
 
 	int imode = pin->i_mode & I_TYPE_MASK;
@@ -73,15 +74,7 @@ PUBLIC int do_rdwt()
 	else {
 		assert(pin->i_mode == I_REGULAR || pin->i_mode == I_DIRECTORY);
 		assert((fs_msg.type == READ) || (fs_msg.type == WRITE));
-		
-		if(len < 0 && fs_msg.type == WRITE){
-			len = -len;
-			pcaller->filp[fd]->fd_pos = pos = pin->i_size;
-			printl("pos: %d\n",pos);
-		}
-		if(len < 0 && fs_msg.type == READ){
-			len = pin->i_size;		
-		}	
+
 		int pos_end;
 		if (fs_msg.type == READ)
 			pos_end = min(pos + len, pin->i_size);
@@ -130,7 +123,7 @@ PUBLIC int do_rdwt()
 			bytes_left -= bytes;
 		}
 
-		if (pcaller->filp[fd]->fd_pos > pin->i_size && fs_msg.type == WRITE) {
+		if (pcaller->filp[fd]->fd_pos > pin->i_size) {
 			/* update inode::size */
 			pin->i_size = pcaller->filp[fd]->fd_pos;
 			/* write the updated i-node back to disk */

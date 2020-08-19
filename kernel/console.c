@@ -37,9 +37,6 @@ PRIVATE void	clear_screen(int pos, int len);
  * 
  * @param tty  Whose console is to be initialized.
  *****************************************************************************/
-
-
-
 PUBLIC void init_screen(TTY* tty)
 {
 	int nr_tty = tty - tty_table;
@@ -227,7 +224,6 @@ PUBLIC void select_console(int nr_console)
 	if ((nr_console < 0) || (nr_console >= NR_CONSOLES)) return;
 
 	flush(&console_table[current_console = nr_console]);
-	//printf("%d\n",current_console);
 }
 
 
@@ -250,8 +246,6 @@ PUBLIC void select_console(int nr_console)
  * @param dir   SCR_UP : scroll the screen upwards;
  *              SCR_DN : scroll the screen downwards
  *****************************************************************************/
-
-
 PUBLIC void scroll_screen(CONSOLE* con, int dir)
 {
 	/*
@@ -260,6 +254,7 @@ PUBLIC void scroll_screen(CONSOLE* con, int dir)
 	int oldest; /* addr of the oldest available line in the console */
 	int newest; /* .... .. ... latest ......... .... .. ... ....... */
 	int scr_top;/* position of the top of current screen */
+
 	newest = (con->cursor - con->orig) / SCR_WIDTH * SCR_WIDTH;
 	oldest = con->is_full ? (newest + SCR_WIDTH) % con->con_size : 0;
 	scr_top = con->crtc_start - con->orig;
@@ -283,17 +278,14 @@ PUBLIC void scroll_screen(CONSOLE* con, int dir)
 		}
 	}
 	else if (dir == SCR_UP) {
-
 		if (!con->is_full && newest >= scr_top + SCR_SIZE) {
 			con->crtc_start += SCR_WIDTH;
 		}
 		else if (con->is_full && scr_top + SCR_SIZE - SCR_WIDTH != newest) {
 			if (scr_top + SCR_SIZE == con->con_size)
 				con->crtc_start = con->orig;
-			else{
+			else
 				con->crtc_start += SCR_WIDTH;
-				
-			}
 		}
 	}
 	else {

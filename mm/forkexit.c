@@ -126,7 +126,6 @@ PUBLIC int do_fork()
 	m.type = SYSCALL_RET;
 	m.RETVAL = 0;
 	m.PID = 0;
-	append_proc(p,queue_table);
 	send_recv(SEND, child_pid, &m);
 
 	return 0;

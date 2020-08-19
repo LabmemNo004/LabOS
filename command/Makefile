@@ -12,7 +12,7 @@ CFLAGS		= -I ../include/ -c -fno-builtin -fno-stack-protector -Wall
 LDFLAGS		= -Ttext 0x1000
 DASMFLAGS	= -D
 LIB		= ../lib/orangescrt.a
-BIN		= echo pwd calculator queen
+BIN		= game
 
 # All Phony Targets
 .PHONY : everything final clean realclean disasm all install
@@ -52,14 +52,8 @@ pwd.o: pwd.c ../include/type.h ../include/stdio.h
 
 pwd : pwd.o start.o $(LIB)
 	$(LD) $(LDFLAGS) -o $@ $?
-
-calculator.o: calculator.c ../include/type.h ../include/stdio.h
+game.o: game.c ../include/type.h ../include/stdio.h
 	$(CC) $(CFLAGS) -o $@ $<
 
-calculator : calculator.o start.o $(LIB)
-	$(LD) $(LDFLAGS) -o $@ $?
-queen.o: queen.c ../include/type.h ../include/stdio.h
-	$(CC) $(CFLAGS) -o $@ $<
-
-queen : queen.o start.o $(LIB)
+game : game.o start.o $(LIB)
 	$(LD) $(LDFLAGS) -o $@ $?

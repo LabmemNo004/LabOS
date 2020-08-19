@@ -28,7 +28,7 @@ typedef struct s_tty
 	void*	tty_req_buf;
 	int	tty_left_cnt;
 	int	tty_trans_cnt;
-	char	tty_current_path[MAX_PATH];
+
 	struct s_console *	console;
 }TTY;
 

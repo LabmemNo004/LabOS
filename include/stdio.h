@@ -30,8 +30,6 @@ void assertion_failure(char *exp, char *file, char *base_file, int line);
 
 #define	O_CREAT		1
 #define	O_RDWR		2
-#define O_DIR		4
-#define O_CAM		8
 
 #define SEEK_SET	1
 #define SEEK_CUR	2
@@ -147,7 +145,6 @@ PUBLIC int	stat		(const char *path, struct stat *buf);
 
 /* lib/syslog.c */
 PUBLIC	int	syslog		(const char *fmt, ...);
-PUBLIC void animation();
 
 
 #endif /* _ORANGES_STDIO_H_ */

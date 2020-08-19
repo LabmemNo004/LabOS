@@ -105,7 +105,6 @@ PUBLIC int do_exec()
 	proc_table[src].regs.esp = PROC_IMAGE_SIZE_DEFAULT - PROC_ORIGIN_STACK;
 
 	strcpy(proc_table[src].name, pathname);
-	//assert(0);
 
 	return 0;
 }

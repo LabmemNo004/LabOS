@@ -42,20 +42,19 @@ PUBLIC void task_mm()
 		int reply = 1;
 
 		int msgtype = mm_msg.type;
-		//printl("%d\n",msgtype);
 
 		switch (msgtype) {
-		case FORK:  //20
+		case FORK:
 			mm_msg.RETVAL = do_fork();
 			break;
-		case EXIT:  //21
+		case EXIT:
 			do_exit(mm_msg.STATUS);
 			reply = 0;
 			break;
-		case EXEC:  //18
+		case EXEC:
 			mm_msg.RETVAL = do_exec();
 			break;
-		case WAIT:  //19
+		case WAIT:
 			do_wait();
 			reply = 0;
 			break;

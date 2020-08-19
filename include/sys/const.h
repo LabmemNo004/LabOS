@@ -25,6 +25,8 @@
 #define BLUE    0x1     /* 0001 */
 #define FLASH   0x80    /* 1000 0000 */
 #define BRIGHT  0x08    /* 0000 1000 */
+#define YELLOW  0X6
+#define LIGHT 0XE
 #define	MAKE_COLOR(x,y)	((x<<4) | y) /* MAKE_COLOR(Background,Foreground) */
 
 /* GDT 和 IDT 中描述符的个数 */
@@ -167,13 +169,13 @@ enum msgtype {
 	HARD_INT = 1,
 
 	/* SYS task */
-	GET_TICKS, GET_PID, GET_RTC_TIME,
+	GET_TICKS, GET_PID, GET_RTC_TIME, XIA,
 
 	/* FS */
-	OPEN, CLOSE, READ, WRITE, LSEEK, STAT, UNLINK, SHOW, RENAME, FIND,
+	OPEN, CLOSE, READ, WRITE, LSEEK, STAT, UNLINK,
 
 	/* FS & TTY */
-	SUSPEND_PROC, RESUME_PROC,CLEAN,RESET,
+	SUSPEND_PROC, RESUME_PROC,
 
 	/* MM */
 	EXEC, WAIT,
@@ -189,10 +191,7 @@ enum msgtype {
 	DEV_CLOSE,
 	DEV_READ,
 	DEV_WRITE,
-	DEV_IOCTL,
-	DEV_CLEAN,
-	DEV_RESET,
-	DEV_GETPATH
+	DEV_IOCTL
 };
 
 /* macros for messages */

@@ -45,21 +45,3 @@ PUBLIC int open(const char *pathname, int flags)
 
 	return msg.FD;
 }
-
-PUBLIC int rename(const char *pathname, const char *buf)
-{
-	MESSAGE msg;
-
-	msg.type	= RENAME;
-
-	msg.PATHNAME	= (void*)pathname;
-	msg.BUF		= (void*)buf;
-	msg.NAME_LEN	= strlen(pathname);
-	msg.BUF_LEN	= strlen(buf);
-	printl("msg: %s, %d, %d\n",msg.PATHNAME,strlen(pathname),msg.NAME_LEN);
-	
-	send_recv(BOTH, TASK_FS, &msg);
-	assert(msg.type == SYSCALL_RET);
-
-	return msg.RETVAL;
-}

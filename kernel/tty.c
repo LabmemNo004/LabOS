@@ -60,54 +60,6 @@ PRIVATE void	tty_dev_write	(TTY* tty);
 PRIVATE void	tty_do_read	(TTY* tty, MESSAGE* msg);
 PRIVATE void	tty_do_write	(TTY* tty, MESSAGE* msg);
 PRIVATE void	put_key		(TTY* tty, u32 key);
-PRIVATE void	tty_do_clean	(TTY* tty, MESSAGE* msg);
-PRIVATE void	tty_do_reset	(TTY* tty, MESSAGE* msg);
-PRIVATE void	tty_do_getpath	(TTY* tty, MESSAGE* msg);
-
-PRIVATE void tty_do_clean(TTY* tty, MESSAGE* msg)
-{
-	//tty++;
-	//CONSOLE* con = tty++->console;			
-	tty->console->cursor = tty->console->crtc_start 
-		= tty->console->crtc_start
-			+ SCR_WIDTH*((tty->console->cursor-tty->console->crtc_start)/SCR_WIDTH);
-	msg->type = CLEAN;
-	send_recv(SEND, msg->source, msg);
-	//assert(0);
-}
-
-PRIVATE void tty_do_reset(TTY* tty, MESSAGE* msg)
-{
-	//tty++;
-	init_tty(tty);
-	for(int i=0;i<tty->console->cursor-tty->console->crtc_start;i++)
-	{
-		out_char(tty->console, ' ');
-	}
-	init_tty(tty);
-	msg->type = RESET;
-	send_recv(SEND, msg->source, msg);
-}
-/*
-PRIVATE void tty_do_getpath(TTY* tty, MESSAGE* msg)
-{
-	char pathname[MAX_PATH] = "asdfasd";
-	char* ch = (char*)msg->BUF;
-	//char* s  = tty->tty_current_path;
-	char* s  = pathname;	
-	//phys_copy((void*)va2la(TASK_FS, fsbuf + off),
-	//		(void*)va2la(msg->PROC_NR, buf),
-	//		bytes);
-	while(*s)
-	{
-		*ch++ = *s++;
-	}
-	*ch = 0;
-	printl("%s 1\n",msg->BUF);
-	msg->CNT = strlen(msg->BUF);	
-	msg->type = GET_PATH;
-	send_recv(SEND, msg->source, msg);
-}*/
 
 
 /*****************************************************************************
@@ -137,13 +89,12 @@ PUBLIC void task_tty()
 		}
 
 		send_recv(RECEIVE, ANY, &msg);
-		//assert(msg.type != DEV_CLEAN);
 
 		int src = msg.source;
 		assert(src != TASK_TTY);
 
 		TTY* ptty = &tty_table[msg.DEVICE];
-	
+
 		switch (msg.type) {
 		case DEV_OPEN:
 			reset_msg(&msg);
@@ -155,15 +106,6 @@ PUBLIC void task_tty()
 			break;
 		case DEV_WRITE:
 			tty_do_write(ptty, &msg);
-			break;
-		case DEV_CLEAN:
-			tty_do_clean(ptty, &msg);
-			break;
-		case DEV_RESET:
-			tty_do_reset(ptty, &msg);
-			break;
-		/*case DEV_GETPATH:
-			tty_do_getpath(ptty, &msg);*/
 			break;
 		case HARD_INT:
 			/**
@@ -178,7 +120,6 @@ PUBLIC void task_tty()
 		}
 	}
 }
-
 
 
 /*****************************************************************************
@@ -201,7 +142,6 @@ PRIVATE void init_tty(TTY* tty)
 	tty->tty_req_buf = 0;
 	tty->tty_left_cnt = 0;
 	tty->tty_trans_cnt = 0;
-	strcpy(tty->tty_current_path,"\\");
 
 	init_screen(tty);
 }
@@ -242,18 +182,6 @@ PUBLIC void in_process(TTY* tty, u32 key)
 				scroll_screen(tty->console, SCR_UP);
 			}
 			break;
-		case LEFT:
-			if ((key & FLAG_SHIFT_L) ||
-			    (key & FLAG_SHIFT_R)) {	/* Shift + LEFT */
-				select_console(((current_console - 1) == -1)? 2 : current_console - 1);
-			}
-			break;
-		case RIGHT:
-			if ((key & FLAG_SHIFT_L) ||
-			    (key & FLAG_SHIFT_R)) {	/* Shift + RIGHT */
-				select_console(((current_console + 1) == 3)? 0 : current_console + 1);
-			}
-			break;
 		case F1:
 		case F2:
 		case F3:
@@ -266,10 +194,10 @@ PUBLIC void in_process(TTY* tty, u32 key)
 		case F10:
 		case F11:
 		case F12:
-			/*if ((key & FLAG_SHIFT_L) ||
-			    (key & FLAG_SHIFT_R)) {	 Alt + F1~F12 
+			if ((key & FLAG_ALT_L) ||
+			    (key & FLAG_ALT_R)) {	/* Alt + F1~F12 */
 				select_console(raw_code - F1);
-			}*/
+			}
 			break;
 		default:
 			break;

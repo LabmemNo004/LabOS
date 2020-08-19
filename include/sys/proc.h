@@ -1,53 +1,4 @@
 
-
-
-#define proc2pid(x) (x - proc_table)
-
-/* Number of tasks & processes */
-#define NR_TASKS		5
-#define NR_PROCS		32
-#define NR_QUEUE		3
-#define NR_NATIVE_PROCS		4
-#define FIRST_PROC		proc_table[0]
-#define LAST_PROC		proc_table[NR_TASKS + NR_PROCS - 1]
-#define Q_PR1			10
-#define Q_PR2			20
-#define Q_PR3			100
-
-/**
- * All forked proc will use memory above PROCS_BASE.
- *
- * @attention make sure PROCS_BASE is higher than any buffers, such as
- *            fsbuf, mmbuf, etc
- * @see global.c
- * @see global.h
- */
-#define	PROCS_BASE		0xA00000 /* 10 MB */
-#define	PROC_IMAGE_SIZE_DEFAULT	0x100000 /*  1 MB */
-#define	PROC_ORIGIN_STACK	0x400    /*  1 KB */
-
-/* stacks of tasks */
-#define	STACK_SIZE_DEFAULT	0x4000 /* 16 KB */
-#define STACK_SIZE_TTY		STACK_SIZE_DEFAULT
-#define STACK_SIZE_SYS		STACK_SIZE_DEFAULT
-#define STACK_SIZE_HD		STACK_SIZE_DEFAULT
-#define STACK_SIZE_FS		STACK_SIZE_DEFAULT
-#define STACK_SIZE_MM		STACK_SIZE_DEFAULT
-#define STACK_SIZE_INIT		STACK_SIZE_DEFAULT
-#define STACK_SIZE_TESTA	STACK_SIZE_DEFAULT
-#define STACK_SIZE_TESTB	STACK_SIZE_DEFAULT
-#define STACK_SIZE_TESTC	STACK_SIZE_DEFAULT
-
-#define STACK_SIZE_TOTAL	(STACK_SIZE_TTY + \
-				STACK_SIZE_SYS + \
-				STACK_SIZE_HD + \
-				STACK_SIZE_FS + \
-				STACK_SIZE_MM + \
-				STACK_SIZE_INIT + \
-				STACK_SIZE_TESTA + \
-				STACK_SIZE_TESTB + \
-				STACK_SIZE_TESTC)
-
 /*++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
                                proc.h
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -85,7 +36,6 @@ struct proc {
 
         int ticks;                 /* remained ticks */
         int priority;
-	int type;
 
 	/* u32 pid;                   /\* process id passed in from MM *\/ */
 	char name[16];		   /* name of the process */
@@ -126,12 +76,46 @@ struct task {
 	char	name[32];
 };
 
-typedef struct s_queue{
-	struct s_proc**	p_head;
-	struct s_proc**	p_tail;
-	int	priority;
-	int	count;
-	struct	s_proc*	buf[NR_PROCS];
-}QUEUE;
+#define proc2pid(x) (x - proc_table)
 
+/* Number of tasks & processes */
+#define NR_TASKS		5
+#define NR_PROCS		10
+#define NR_NATIVE_PROCS		4
+#define FIRST_PROC		proc_table[0]
+#define LAST_PROC		proc_table[NR_TASKS + NR_PROCS - 1]
+
+/**
+ * All forked proc will use memory above PROCS_BASE.
+ *
+ * @attention make sure PROCS_BASE is higher than any buffers, such as
+ *            fsbuf, mmbuf, etc
+ * @see global.c
+ * @see global.h
+ */
+#define	PROCS_BASE		0xA00000 /* 10 MB */
+#define	PROC_IMAGE_SIZE_DEFAULT	0x100000 /*  1 MB */
+#define	PROC_ORIGIN_STACK	0x400    /*  1 KB */
+
+/* stacks of tasks */
+#define	STACK_SIZE_DEFAULT	0x4000 /* 16 KB */
+#define STACK_SIZE_TTY		STACK_SIZE_DEFAULT
+#define STACK_SIZE_SYS		STACK_SIZE_DEFAULT
+#define STACK_SIZE_HD		STACK_SIZE_DEFAULT
+#define STACK_SIZE_FS		STACK_SIZE_DEFAULT
+#define STACK_SIZE_MM		STACK_SIZE_DEFAULT
+#define STACK_SIZE_INIT		STACK_SIZE_DEFAULT
+#define STACK_SIZE_TESTA	STACK_SIZE_DEFAULT
+#define STACK_SIZE_TESTB	STACK_SIZE_DEFAULT
+#define STACK_SIZE_TESTC	STACK_SIZE_DEFAULT
+
+#define STACK_SIZE_TOTAL	(STACK_SIZE_TTY + \
+				STACK_SIZE_SYS + \
+				STACK_SIZE_HD + \
+				STACK_SIZE_FS + \
+				STACK_SIZE_MM + \
+				STACK_SIZE_INIT + \
+				STACK_SIZE_TESTA + \
+				STACK_SIZE_TESTB + \
+				STACK_SIZE_TESTC)
 

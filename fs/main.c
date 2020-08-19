@@ -47,6 +47,7 @@ PUBLIC void task_fs()
 		int msgtype = fs_msg.type;
 		int src = fs_msg.source;
 		pcaller = &proc_table[src];
+
 		switch (msgtype) {
 		case OPEN:
 			fs_msg.FD = do_open();
@@ -56,14 +57,10 @@ PUBLIC void task_fs()
 			break;
 		case READ:
 		case WRITE:
-			//printl("msg2: %s\n",fs_msg.BUF);
 			fs_msg.CNT = do_rdwt();
 			break;
 		case UNLINK:
 			fs_msg.RETVAL = do_unlink();
-			break;
-		case SHOW:
-			fs_msg.RETVAL = do_show_dir();
 			break;
 		case RESUME_PROC:
 			src = fs_msg.PROC_NR;
@@ -80,16 +77,6 @@ PUBLIC void task_fs()
 		case STAT:
 			fs_msg.RETVAL = do_stat();
 			break;
-		case CLEAN:
-		case RESET:
-			do_cnrt();
-			break;
-		case RENAME:
-			fs_msg.RETVAL = do_rename();			
-			break;
-		case FIND:
-			//fs_msg.RETVAL = do_find();			
-			break;
 		default:
 			dump_msg("FS::unknown message:", &fs_msg);
 			assert(0);
@@ -104,28 +91,21 @@ PUBLIC void task_fs()
 		msg_name[WRITE]  = "WRITE";
 		msg_name[LSEEK]  = "LSEEK";
 		msg_name[UNLINK] = "UNLINK";
-		msg_name[SHOW]	 = "SHOW";
-		msg_name[CLEAN]	 = "CLEAN";
-		msg_name[RESET]  = "RESET";
 		/* msg_name[FORK]   = "FORK"; */
 		/* msg_name[EXIT]   = "EXIT"; */
 		/* msg_name[STAT]   = "STAT"; */
 
 		switch (msgtype) {
 		case UNLINK:
-			dump_fd_graph("%s just finished. (pid:%d)",
-				      msg_name[msgtype], src);
+			//dump_fd_graph("%s just finished. (pid:%d)",
+				   //   msg_name[msgtype], src);
 			//panic("");
 		case OPEN:
 		case CLOSE:
 		case READ:
 		case WRITE:
-		case SHOW:
 		case FORK:
 		case EXIT:
-		case CLEAN:
-		case RESET:
-		case RENAME:
 		/* case LSEEK: */
 		case STAT:
 			break;
@@ -135,8 +115,9 @@ PUBLIC void task_fs()
 			assert(0);
 		}
 #endif
+
 		/* reply */
-		if (fs_msg.type != SUSPEND_PROC&&fs_msg.type != RESET&&fs_msg.type != CLEAN) {
+		if (fs_msg.type != SUSPEND_PROC) {
 			fs_msg.type = SYSCALL_RET;
 			send_recv(SEND, src, &fs_msg);
 		}
@@ -173,13 +154,9 @@ PRIVATE void init_fs()
 	driver_msg.DEVICE = MINOR(ROOT_DEV);
 	assert(dd_map[MAJOR(ROOT_DEV)].driver_nr != INVALID_DRIVER);
 	send_recv(BOTH, dd_map[MAJOR(ROOT_DEV)].driver_nr, &driver_msg);
-	RD_SECT(ROOT_DEV, 1);
-	sb = (struct super_block *)fsbuf;
-	//printl("%d, %d",sb->magic,MAGIC_V1);
-	if (sb->magic != MAGIC_V1) {
-		printl("{FS} mkfs\n");
-		mkfs(); 
-	}
+
+	/* make FS */
+	mkfs();
 
 	/* load super block of ROOT */
 	read_super_block(ROOT_DEV);
@@ -363,13 +340,11 @@ PRIVATE void mkfs()
 
 	pde->inode_nr = 1;
 	strcpy(pde->name, ".");
-	pde->type = I_DIRECTORY;
 
 	/* dir entries of `/dev_tty0~2' */
 	for (i = 0; i < NR_CONSOLES; i++) {
 		pde++;
 		pde->inode_nr = i + 2; /* dev_tty0's inode_nr is 2 */
-		pde->type = I_CHAR_SPECIAL;
 		sprintf(pde->name, "dev_tty%d", i);
 	}
 	(++pde)->inode_nr = NR_CONSOLES + 2;

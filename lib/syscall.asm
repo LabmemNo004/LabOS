@@ -10,11 +10,10 @@
 INT_VECTOR_SYS_CALL equ 0x90
 _NR_printx	    equ 0
 _NR_sendrec	    equ 1
-_NR_clear_screen    equ 2
+
 ; 导出符号
 global	printx
 global	sendrec
-global  clear_screen
 
 bits 32
 [section .text]

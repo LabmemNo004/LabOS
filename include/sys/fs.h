@@ -108,7 +108,6 @@ struct inode {
 struct dir_entry {
 	int	inode_nr;		/**< inode nr. */
 	char	name[MAX_FILENAME_LEN];	/**< Filename */
-	int 	type;
 };
 
 /**

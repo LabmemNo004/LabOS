@@ -22,7 +22,6 @@ typedef struct s_console
 #define SCR_UP	1	/* scroll upward */
 #define SCR_DN	-1	/* scroll downward */
 
-
 #define SCR_SIZE		(80 * 25)
 #define SCR_WIDTH		 80
 

@@ -13,13 +13,13 @@ ENTRYOFFSET	=   0x400
 # Programs, flags, etc.
 ASM		= nasm
 DASM		= objdump
-CC		= gcc
+CC		= gcc -std=c99
 LD		= ld
 ASMBFLAGS	= -I boot/include/
 ASMKFLAGS	= -I include/ -I include/sys/ -f elf
-CFLAGS		= -m32 -I include/ -I include/sys/  -fno-stack-protector -c -fno-builtin -Wall
+CFLAGS		= -I include/ -I include/sys/ -c -fno-builtin -fno-stack-protector -Wall
 #CFLAGS		= -I include/ -c -fno-builtin -fno-stack-protector -fpack-struct -Wall
-LDFLAGS		= -m elf_i386 -Ttext $(ENTRYPOINT) -Map krnl.map
+LDFLAGS		= -Ttext $(ENTRYPOINT) -Map krnl.map
 DASMFLAGS	= -D
 ARFLAGS		= rcs
 
@@ -32,7 +32,7 @@ OBJS		= kernel/kernel.o kernel/start.o kernel/main.o\
 			kernel/clock.o kernel/keyboard.o kernel/tty.o kernel/console.o\
 			kernel/i8259.o kernel/global.o kernel/protect.o kernel/proc.o\
 			kernel/systask.o kernel/hd.o\
-			kernel/kliba.o kernel/klib.o kernel/animation.o\
+			kernel/kliba.o kernel/klib.o\
 			lib/syslog.o\
 			mm/main.o mm/forkexit.o mm/exec.o\
 			fs/main.o fs/open.o fs/misc.o fs/read_write.o\
@@ -119,9 +119,6 @@ kernel/global.o: kernel/global.c
 	$(CC) $(CFLAGS) -o $@ $<
 
 kernel/protect.o: kernel/protect.c
-	$(CC) $(CFLAGS) -o $@ $<
-
-kernel/animation.o: kernel/animation.c
 	$(CC) $(CFLAGS) -o $@ $<
 
 kernel/proc.o: kernel/proc.c
